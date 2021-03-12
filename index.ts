@@ -172,6 +172,48 @@ export function addMatchers() {
         return { pass: false, message };
       },
     }),
+    toBeObservableThatVerify: (utils, equalityTester) => ({
+      compare: function(actual: TestObservable, fixture: TestObservable) {
+        const results: TestMessages = [];
+        let subscription: Subscription;
+        const scheduler = getTestScheduler();
+
+        const expected = TestScheduler.parseMarbles(
+            fixture.marbles,
+            fixture.values,
+            fixture.error,
+            true,
+            true,
+        );
+
+        scheduler.schedule(() => {
+          subscription = actual.subscribe((x) => {
+            let value = x;
+            // Support Observable-of-Observables
+            if (x instanceof Observable) {
+              throw new Error("Unsupported format")
+            }
+            const verifier = expected.find(e => e.frame === scheduler.frame && e.notification.kind === "N");
+            if (verifier && verifier.notification.value instanceof Function) {
+              verifier.notification.value(value)
+            }
+          }, (err) => {
+            const verifier = expected.find(e => e.frame === scheduler.frame && e.notification.kind === "E");
+            if (verifier && verifier.notification.value instanceof Function) {
+              verifier.notification.value(err)
+            }
+          }, () => {
+            const verifier = expected.find(e => e.frame === scheduler.frame && e.notification.kind === "C");
+            if (verifier && verifier.notification.value instanceof Function) {
+              verifier.notification.value()
+            }
+          });
+        });
+        scheduler.flush();
+
+        return { pass: true };
+      },
+    }),
   });
 }
 
